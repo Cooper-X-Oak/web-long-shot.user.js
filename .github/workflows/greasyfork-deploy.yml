@@ -1,0 +1,50 @@
+name: Deploy to Greasy Fork
+
+on:
+  push:
+    paths:
+      - 'web-long-shot.user.js'
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Update Greasy Fork
+        env:
+          # 请在 GitHub 仓库 Settings -> Secrets and variables -> Actions 中添加以下两个 Secret:
+          # GREASYFORK_API_KEY: 你的 GreasyFork API Key (在 https://greasyfork.org/users/edit 获取)
+          # GREASYFORK_SCRIPT_ID: 你的脚本 ID (例如 https://greasyfork.org/scripts/12345-xxx 中的 12345)
+          API_KEY: ${{ secrets.GREASYFORK_API_KEY }}
+          SCRIPT_ID: ${{ secrets.GREASYFORK_SCRIPT_ID }}
+        run: |
+          if [ -z "$API_KEY" ] || [ -z "$SCRIPT_ID" ]; then
+            echo "Error: Secrets GREASYFORK_API_KEY or GREASYFORK_SCRIPT_ID not found."
+            exit 1
+          fi
+          
+          echo "Deploying script ID $SCRIPT_ID to Greasy Fork..."
+          
+          # 使用 curl 提交更新
+          # 文档: https://greasyfork.org/zh-CN/help/api-import
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
+            -F "s=@web-long-shot.user.js" \
+            -F "k=$API_KEY" \
+            "https://greasyfork.org/zh-CN/scripts/$SCRIPT_ID/code-update")
+            
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS" | cut -d: -f2)
+          CONTENT=$(echo "$RESPONSE" | grep -v "HTTP_STATUS")
+          
+          if [ "$HTTP_STATUS" -eq 302 ] || [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed with status $HTTP_STATUS"
+            echo "Response: $CONTENT"
+            exit 1
+          fi
