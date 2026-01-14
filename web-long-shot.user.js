@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         网页长图生成器 (Web Long Shot)
 // @namespace    http://tampermonkey.net/
-// @version      0.7
+// @version      0.8
 // @description  一键将任意网页生成长图并直接预览 (Instant Web Long Shot)
 // @author       Trae AI Architect
 // @match        *://*/*
@@ -66,21 +66,74 @@
     // 移除 isImageSafe 和 fixCorsImages
     
     /**
-     * 自动滚动页面以触发懒加载 (瞬移版)
-     * 直接跳底再跳顶，极大缩短时间
+     * 获取页面主要滚动容器
+     * 针对部分网站使用 div 滚动而非 window 滚动的情况
+     */
+    function getScrollContainer() {
+        // 1. 优先检查 document.scrollingElement (通常是 html 或 body)
+        if (document.scrollingElement && document.scrollingElement.scrollHeight > window.innerHeight) {
+            return document.scrollingElement;
+        }
+
+        // 2. 如果 body 看起来不可滚动 (overflow: hidden 或 height: 100%)，寻找内部滚动容器
+        // 简单启发式：寻找 scrollHeight 最大的块级元素
+        let maxScrollHeight = 0;
+        let candidate = null;
+        
+        const elements = document.querySelectorAll('div, main, section, article');
+        for (let el of elements) {
+            const style = window.getComputedStyle(el);
+            if (['auto', 'scroll'].includes(style.overflowY) && el.scrollHeight > el.clientHeight) {
+                if (el.scrollHeight > maxScrollHeight) {
+                    maxScrollHeight = el.scrollHeight;
+                    candidate = el;
+                }
+            }
+        }
+        
+        return candidate || document.body;
+    }
+
+    /**
+     * 自动滚动页面以触发懒加载 (稳健版)
+     * 放弃瞬移，采用大步幅快速滚动，确保懒加载被触发
      */
     async function autoScroll() {
-        const totalHeight = document.body.scrollHeight;
+        const scroller = getScrollContainer();
+        const totalHeight = scroller.scrollHeight;
+        const viewportHeight = window.innerHeight;
         
-        showToast('⬇️ 触发懒加载...', 0);
+        showToast('⬇️ 正在滚动加载内容...', 0);
 
-        // 1. 瞬间跳到底部 (强制 instant 避免平滑滚动动画)
-        window.scrollTo({ top: totalHeight, behavior: 'instant' });
-        await new Promise(resolve => setTimeout(resolve, 100)); // 缩减到 100ms
+        // 使用较大步幅进行滚动，平衡速度与加载成功率
+        // 步幅设为 1.5 倍视口，既能触发可视区域附近的懒加载，又比逐行快
+        const step = viewportHeight * 1.5;
+        let currentPos = 0;
 
-        // 2. 瞬间跳回顶部
-        window.scrollTo({ top: 0, behavior: 'instant' });
-        await new Promise(resolve => setTimeout(resolve, 100)); // 缩减到 100ms
+        // 如果是 window 滚动
+        const isWindow = (scroller === document.body || scroller === document.documentElement);
+
+        while (currentPos < totalHeight) {
+            currentPos += step;
+            if (currentPos > totalHeight) currentPos = totalHeight;
+
+            if (isWindow) {
+                window.scrollTo(0, currentPos);
+            } else {
+                scroller.scrollTop = currentPos;
+            }
+            
+            // 等待时间从 200ms 调整为 100ms，足够触发大部分 IntersectionObserver
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        // 滚回顶部
+        if (isWindow) {
+            window.scrollTo(0, 0);
+        } else {
+            scroller.scrollTop = 0;
+        }
+        await new Promise(resolve => setTimeout(resolve, 500)); // 顶部等待稍长，确保首屏渲染
     }
 
     /**

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.8] - 2026-01-14
+### Fixed
+- **滚动容器检测**: 修复了在非 window 滚动的网站（如使用 `overflow: scroll` 的 SPA 应用）上无法触发自动滚动的问题。现在会自动寻找页面中 scrollHeight 最大的容器进行操作。
+- **懒加载失效修复**: 放弃了过于激进的“瞬移”策略，改回稳健的快速滚动（1.5倍视口步幅），解决了部分网站因滚动太快导致图片未加载的问题。
+### Changed
+- **文档更新**: 在 README 中明确了脚本的局限性，特别说明了不支持 Virtual Scrolling（虚拟滚动）类网站。
+
 ## [v0.7] - 2026-01-14
 ### Changed
 - **极速体验重构**: 移除了耗时的图片跨域预检测逻辑，截图速度提升 500%。
